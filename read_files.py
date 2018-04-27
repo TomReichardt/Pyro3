@@ -61,6 +61,7 @@ def read_palette():
 
 def command_parser(command,current_dataset):
     matches_found = False
+    dataset_counter = 0
     matches = re.finditer(r'(\d?){([\d\-\s,]+:\d)}', command, re.I)
     plot_columns = {}
     for match in matches:
@@ -84,7 +85,8 @@ def command_parser(command,current_dataset):
         columns[0] = columns[0].replace(',', ' ')
         columns[0] = columns[0].split()
         if dataset == '':
-            dataset = current_dataset
+            dataset = current_dataset + dataset_counter
+            dataset_counter += 1
         dataset = int(dataset)
 
         if dataset in plot_columns:
@@ -129,8 +131,7 @@ class Plotter:
         ax.set_xlim(float_if_possible(self.params['xlo']), float_if_possible(self.params['xup']))
         ax.set_ylim(float_if_possible(self.params['ylo']), float_if_possible(self.params['yup']))
 
-        ax.set_xlabel(str(self.params['xlab']))
-        ax.set_ylabel(str(self.params['ylab']))
+        self.update_labels(ax, data, plot_columns)
 
         if self.params['ltog'] == [0]: ax.legend()
 
@@ -278,6 +279,22 @@ class Plotter:
             axis.set_xlabel(xlab[4:])
         elif (ylog is False) and (ylab[0:4] == 'log '):
             axis.set_ylabel(ylab[4:])
+
+    def update_labels(self, ax, data, plot_columns):
+        xlabs = [self.params['xlab']]
+        ylabs = [self.params['ylab']]
+
+        for dataset, columns in plot_columns.items():
+            for i, pair in enumerate(columns):
+                lab = list(data[dataset-1])[pair[0]-1]
+                if lab not in xlabs:
+                    xlabs.append(lab)
+                lab = list(data[dataset-1])[pair[1]-1]
+                if lab not in ylabs:
+                    ylabs.append(lab)
+
+        ax.set_xlabel(str(xlabs[self.params['collabs'][0]]))
+        ax.set_ylabel(str(ylabs[self.params['collabs'][0]]))
 
     def update_legend(self, ax):
         if self.params['ltog'] == [0]:

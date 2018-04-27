@@ -18,14 +18,14 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
 
         self.draw_title()
 
-        self.draw_columns(['{:>3}. {}'.format(i+1, title) for i, title in enumerate(list(self.data[0].columns))])
+        self.draw_columns()
 
         prompt = 'Type your command here : '
         self.add(nps.FixedText, value=prompt, editable=False, relx=5, rely=self.max_y-3, height=1)
         self.nextrelx = 5 + len(prompt)
-        self.command_prompt = self.add(nps.Textfield, value=' ', rely=self.max_y-3, height=1)
+        self.command_prompt = self.add(nps.Textfield, value='', rely=self.max_y-3, height=1)
         self.command_prompt.add_handlers({'q' : self.h_exit_application})
-        self.command_prompt.add_handlers({10 : self.parse_command})
+        self.command_prompt.add_handlers({10  : self.parse_command})
         self.command_prompt.add_handlers({'n' : self.next_data})
         self.command_prompt.add_handlers({'b' : self.previous_data})
 
@@ -34,7 +34,8 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
         self.m1.addItem('Set limits', lambda: self.parentApp.switchForm('Limits 1'), shortcut='l')
 
         self.m2 = self.add_menu(name="Labels", shortcut="a")
-        self.m2.addItem('Set labels', lambda: self.parentApp.switchForm('Labels 1'), shortcut='a')
+        self.m2.addItem('Toggle using column labels', lambda: self.parentApp.switchForm('Labels 1'), shortcut='1')
+        self.m2.addItem('Set labels', lambda: self.parentApp.switchForm('Labels 2'), shortcut='2')
 
         self.m3 = self.add_menu(name="Legend", shortcut="e")
         self.m3.addItem('Toggle legend', lambda: self.parentApp.switchForm('Legend 1'), shortcut='e')
@@ -69,9 +70,15 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
         self.mainTitle = self.add(nps.MultiLine, editable=False, values=self.parentApp.PYRO)
         self.mainTitle.set_relyx(2, (self.max_x-len(self.mainTitle.values[0]))//2)
         self.mainTitle.max_height = len(self.mainTitle.values)
-        self.draw_line_at=self.mainTitle.rely+len(self.mainTitle.values)+1
+        self.draw_line_at=self.mainTitle.rely+len(self.mainTitle.values)+2
 
-    def draw_columns(self, columns):
+    def draw_columns(self):
+        cformat = '{:^' + str(self.max_x - 2) + '}'
+        dataset_name = cformat.format(str('Dataset {} - '.format(self.parentApp.current_dataset) + self.data[self.parentApp.current_dataset-1].name))
+        self.dataTitle = self.add(nps.FixedText, editable=False, value=dataset_name, relx=(self.max_x-len(dataset_name))//2, rely=self.draw_line_at - 1, height=1)
+
+        columns = ['{:>3}. {}'.format(i+1, title) for i, title in enumerate(list(self.data[self.parentApp.current_dataset-1].columns))]
+
         num_cols = 3
         col_len = math.ceil(len(columns) / num_cols)
         col_width = self.max_x // (num_cols + 1)
@@ -89,7 +96,7 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
     def draw_form(self,):
         super(FormObject, self).draw_form()
         self.curses_pad.hline(1, 1, curses.ACS_HLINE, self.max_x-2)
-        self.curses_pad.hline(self.draw_line_at - 1, 1, curses.ACS_HLINE, self.max_x-2)
+        self.curses_pad.hline(self.draw_line_at - 2, 1, curses.ACS_HLINE, self.max_x-2)
         self.curses_pad.hline(self.max_y - 2, 1, curses.ACS_HLINE, self.max_x-2)
         self.curses_pad.hline(self.max_y - 4, 1, curses.ACS_HLINE, self.max_x-2)
 
@@ -102,7 +109,7 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
            self.parentApp.current_dataset = 1
         else:
            self.parentApp.current_dataset += 1
-        self.draw_columns(['{:>3}. {}'.format(i+1, title) for i, title in enumerate(list(self.data[self.parentApp.current_dataset-1].columns))])
+        self.draw_columns()
         self.DISPLAY()
 
     def previous_data(self, *args):
@@ -110,7 +117,7 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
            self.parentApp.current_dataset = len(self.data)
         else:
            self.parentApp.current_dataset -= 1
-        self.draw_columns(['{:>3}. {}'.format(i+1, title) for i, title in enumerate(list(self.data[self.parentApp.current_dataset-1].columns))])
+        self.draw_columns()
         self.DISPLAY()
 
 class menuEnd(nps.fmActionFormV2.ActionFormV2):
@@ -147,7 +154,7 @@ class menuEndParser(menuEnd):
 
         vals = math_parser.evaluate(w2.value, col_dict)
         self.parentApp.data[self.parentApp.current_dataset-1][w1.value] = vals
-        self.parentApp.getForm('MAIN').draw_columns(['{:>3}. {}'.format(i+1, title) for i, title in enumerate(list(self.parentApp.data[self.parentApp.current_dataset-1].columns))])
+        self.parentApp.getForm('MAIN').draw_columns()
         self.parentApp.switchForm('MAIN')
 
 class App(nps.NPSAppManaged):
@@ -181,12 +188,21 @@ class App(nps.NPSAppManaged):
         menu_limits_1 = self.addForm('Limits 1', menuEnd, cycle_widgets=True, widget_list = limits_1_widgets)
 
         ## Axis label forms ##
-        self.plot_parameters.update({'xlab' : None, 'ylab' : None})
+        # Toggle using column names #
+        self.plot_parameters.update({'collabs' : [1]})
 
-        labels_1_widgets =  [(nps.TitleText, {'w_id': 'xlab', 'name': "x-axis label: ", 'value': str(self.plot_parameters['xlab']), 'use_two_lines': False}),
-		             (nps.TitleText, {'w_id': 'ylab', 'name': "y-axis label: ", 'value': str(self.plot_parameters['ylab']), 'use_two_lines': False})]
+        labels_1_widgets =  [(nps.TitleSelectOne, {'w_id': 'collabs', 'name': "Toggle column labels: ", 'values': ['Specified axis labels', 'Column titles'], 'value' : self.plot_parameters['collabs'], 'select_exit' : True, 'use_two_lines': False, 'begin_entry_at' : 30})]
 
         menu_labels_1 = self.addForm('Labels 1', menuEnd, cycle_widgets=True, widget_list = labels_1_widgets)
+
+        # Set axis labels #
+        self.plot_parameters.update({'xlab' : None, 'ylab' : None})
+
+        labels_2_widgets =  [(nps.TitleText,   {'w_id': 'xlab', 'name': "x-axis label: ", 'value': str(self.plot_parameters['xlab']), 'use_two_lines': False}),
+		             (nps.TitleText,   {'w_id': 'ylab', 'name': "y-axis label: ", 'value': str(self.plot_parameters['ylab']), 'use_two_lines': False}),
+                             (nps.DummyWidget, {'w_id': 'collabs', 'value': [0], 'editable': False})]
+
+        menu_labels_2 = self.addForm('Labels 2', menuEnd, cycle_widgets=True, widget_list = labels_2_widgets)
 
         ## Legend forms ##
         self.plot_parameters.update({'ltog' : [0]})
@@ -209,7 +225,7 @@ class App(nps.NPSAppManaged):
 
         page_2_widgets =  [(nps.TitleSelectOne, {'w_id': 'plot', 'name': "Choose plot type: ", 'values': ['Line', 'Scatter'], 'value' : self.plot_parameters['plot'], 'select_exit' : True, 'use_two_lines': False, 'begin_entry_at' : 20})]
 
-        menu_page_1 = self.addForm('Page 2', menuEnd, cycle_widgets=True, widget_list = page_2_widgets)
+        menu_page_2 = self.addForm('Page 2', menuEnd, cycle_widgets=True, widget_list = page_2_widgets)
 
         ## Data forms ##
         data_1_widgets =  [(nps.TitleText, {'w_id': 'ncol', 'name': "New column title: ", 'value': '', 'use_two_lines': False, 'begin_entry_at' : 20}),

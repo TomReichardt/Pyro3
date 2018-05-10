@@ -4,6 +4,8 @@ import npyscreen as nps
 import curses
 import operator
 import read_files
+import plot_utils
+import command_parser
 import math_parser
 import pandas as pd
 import numpy as np
@@ -11,11 +13,19 @@ import sys
 import math
 import re
 
+## Create an array of command prompts for all datasets
+## Each of these will carry the instructions for creating a plot from their dataset
+## Add handler c to clear the current prompt and C (?) to clear all prompts
+## Add ability to set plots against left or right y-axes
+
+
 class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
-    def create(self):
+    def __init__(self, *args, **keywords):
+        self.data = keywords['associated_data']
+        self.dataset = keywords['n_dataset']
+        super(FormObject, self).__init__(*args, **keywords)
 
-        self.data = self.parentApp.data
-
+    def create(self, **keywords):
         self.draw_title()
 
         self.draw_columns()
@@ -28,24 +38,25 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
         self.command_prompt.add_handlers({10  : self.parse_command})
         self.command_prompt.add_handlers({'n' : self.next_data})
         self.command_prompt.add_handlers({'b' : self.previous_data})
+        self.command_prompt.add_handlers({'c' : self.clear_prompt})
 
         self.m1 = self.add_menu(name="Limits", shortcut="l")
         #self.lm1 = self.m1.addNewSubmenu('Set limits', shortcut='l')
-        self.m1.addItem('Set limits', lambda: self.parentApp.switchForm('Limits 1'), shortcut='l')
+        self.m1.addItem('Set limits', lambda: self.switch_menu_form('Limits 1'), shortcut='l')
 
         self.m2 = self.add_menu(name="Labels", shortcut="a")
         self.m2.addItem('Toggle using column labels', lambda: self.parentApp.switchForm('Labels 1'), shortcut='1')
-        self.m2.addItem('Set labels', lambda: self.parentApp.switchForm('Labels 2'), shortcut='2')
+        self.m2.addItem('Set labels', lambda: self.switch_menu_form('Labels 2'), shortcut='2')
 
         self.m3 = self.add_menu(name="Legend", shortcut="e")
-        self.m3.addItem('Toggle legend', lambda: self.parentApp.switchForm('Legend 1'), shortcut='e')
+        self.m3.addItem('Toggle legend', lambda: self.switch_menu_form('Legend 1'), shortcut='e')
 
         self.m4 = self.add_menu(name="Page", shortcut="p")
-        self.m4.addItem('Set page size', lambda: self.parentApp.switchForm('Page 1'), shortcut='1')
-        self.m4.addItem('Set plot type', lambda: self.parentApp.switchForm('Page 2'), shortcut='2')
+        self.m4.addItem('Set page size', lambda: self.switch_menu_form('Page 1'), shortcut='1')
+        self.m4.addItem('Set plot type', lambda: self.switch_menu_form('Page 2'), shortcut='2')
 
         self.m5 = self.add_menu(name="Data", shortcut="d")
-        self.m5.addItem('Multiply columns', lambda: self.parentApp.switchForm('Data 1'), shortcut='d')
+        self.m5.addItem('Multiply columns', lambda: self.switch_menu_form('Data 1'), shortcut='d')
 
         self.m6 = self.add_menu(name="Tunnels", shortcut="t")
         self.m6.addItem('Display Text', self.h_exit_application, shortcut='t')
@@ -74,10 +85,10 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
 
     def draw_columns(self):
         cformat = '{:^' + str(self.max_x - 2) + '}'
-        dataset_name = cformat.format(str('Dataset {} - '.format(self.parentApp.current_dataset) + self.data[self.parentApp.current_dataset-1].name))
+        dataset_name = cformat.format(str('Dataset {} - '.format(self.dataset) + self.data.name))
         self.dataTitle = self.add(nps.FixedText, editable=False, value=dataset_name, relx=(self.max_x-len(dataset_name))//2, rely=self.draw_line_at - 1, height=1)
 
-        columns = ['{:>3}. {}'.format(i+1, title) for i, title in enumerate(list(self.data[self.parentApp.current_dataset-1].columns))]
+        columns = ['{:>3}. {}'.format(i+1, title) for i, title in enumerate(list(self.data.columns))]
 
         num_cols = 3
         col_len = math.ceil(len(columns) / num_cols)
@@ -101,24 +112,27 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
         self.curses_pad.hline(self.max_y - 4, 1, curses.ACS_HLINE, self.max_x-2)
 
     def parse_command(self, *args):
-        plot_columns = read_files.command_parser(self.command_prompt.value, self.parentApp.current_dataset)
+        plot_columns = command_parser.command_parse(self.command_prompt.value, self.dataset)
         self.parentApp.plotter.make_plot(plot_columns, self.data, self.parentApp.plot_parameters)
 
     def next_data(self, *args):
-        if self.parentApp.current_dataset == len(self.data):
-           self.parentApp.current_dataset = 1
+        if self.dataset == len(self.parentApp.data):
+            self.parentApp.switchForm('1')
         else:
-           self.parentApp.current_dataset += 1
-        self.draw_columns()
-        self.DISPLAY()
+            self.parentApp.switchForm(str(self.dataset+1))
 
     def previous_data(self, *args):
-        if self.parentApp.current_dataset == 1:
-           self.parentApp.current_dataset = len(self.data)
+        if self.dataset == 1:
+            self.parentApp.switchForm(str(len(self.parentApp.data)))
         else:
-           self.parentApp.current_dataset -= 1
-        self.draw_columns()
-        self.DISPLAY()
+            self.parentApp.switchForm(str(self.dataset-1))
+
+    def clear_prompt(self, *args):
+        self.command_prompt.value = ''
+
+    def switch_menu_form(self, form_id):
+        self.parentApp.getForm(form_id).return_id = str(self.dataset)
+        self.parentApp.switchForm(form_id)
 
 class menuEnd(nps.fmActionFormV2.ActionFormV2):
     DEFAULT_LINES      = 12
@@ -126,17 +140,21 @@ class menuEnd(nps.fmActionFormV2.ActionFormV2):
     SHOW_ATX           = 10
     SHOW_ATY           = 2
 
+    def __init__(self, *args, **keywords):
+        self.return_id = '1'
+        super(menuEnd, self).__init__(*args, **keywords)
+
     def on_cancel(self):
-        self.parentApp.switchForm('MAIN')
-        self.parentApp.getForm('MAIN').DISPLAY()
-        self.parentApp.getForm('MAIN')._NMDisplay.edit()
+        self.parentApp.switchForm(self.return_id)
+        self.parentApp.getForm(self.return_id).DISPLAY()
+        self.parentApp.getForm(self.return_id)._NMDisplay.edit()
 
     def on_ok(self):
         for key in self.parentApp.plot_parameters.keys():
             if key in self._widgets_by_id:
                 w = self.get_widget(key)
                 self.parentApp.plot_parameters[key] = w.value
-        self.parentApp.switchForm('MAIN')
+        self.parentApp.switchForm(self.return_id)
 
     def print_widget(self, string):
         #self.pr = self.add(nps.FixedText, relx = 5, rely = 5, value=str(self.parentApp.getForm('MAIN')._NMDisplay._DisplayArea._menuListWidget.handlers[ord('q')]))
@@ -158,6 +176,7 @@ class menuEndParser(menuEnd):
         self.parentApp.switchForm('MAIN')
 
 class App(nps.NPSAppManaged):
+    STARTING_FORM = '1'
     def onStart(self):
 
         self.PYRO = ['   WELCOME      TO    ',
@@ -175,8 +194,8 @@ class App(nps.NPSAppManaged):
             self.data.append(pd.DataFrame(list(zip(*vals)),columns=titles))
             self.data[i].name = name
 
-        main_form = self.addForm('MAIN', FormObject)
-        
+        forms = [self.addForm(str(i+1), FormObject, associated_data = data, n_dataset = self.current_dataset+i) for i, data in enumerate(self.data)]
+
         ## Plot limit forms ##
         self.plot_parameters.update({'xup' : '', 'xlo' : '', 'yup' : '', 'ylo' : ''})
 
@@ -232,7 +251,7 @@ class App(nps.NPSAppManaged):
                            (nps.TitleText, {'w_id': 'nexp', 'name': "Expression: ", 'value': '', 'use_two_lines': False})]
 
         menu_data_1 = self.addForm('Data 1', menuEndParser, cycle_widgets=True, widget_list = data_1_widgets)
-        self.plotter = read_files.Plotter()
+        self.plotter = plot_utils.Plotter()
 
 if __name__ == '__main__':
     app = App()

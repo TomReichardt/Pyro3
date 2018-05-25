@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mplc
 import matplotlib as mpl
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 
 
 def float_if_possible(val):
@@ -11,6 +13,11 @@ def float_if_possible(val):
     except (TypeError, ValueError):
         return None
 
+class PlotBundle:
+    def __init__(self, dataset, x, y, yright = False):
+        self.dataset = dataset-1
+        self.x, self.y = x-1, y-1
+        self.use_twinx = yright
 
 class Plotter:
 
@@ -24,19 +31,24 @@ class Plotter:
         self.current_palette = 0
         self.colours = list(self.palettes[self.current_palette].values())[0]
         fig, ax = plt.subplots(figsize=(int(self.params['pwid']), int(self.params['phei'])))
-        #ax_twinx = ax.twinx()
 
-        ax.pfunc = self.update_plot_type(ax)
+        if any(bundle.use_twinx is True for bundle in plot_columns):
+            ax_twinx = ax.twinx()
+
+        #ax.pfunc = self.update_plot_type(ax)
 
         for bundle in plot_columns:
             x = data.iloc[:,bundle.x]
             y = data.iloc[:,bundle.y]
-            ax.pfunc(x, y, picker=5)
+            ax_in = ax_twinx if bundle.use_twinx == True else ax
+            pfunc = self.update_plot_type(ax_in)
+            pfunc(x, y, picker=5)
 
         self.line_colours = self.return_line_colours(ax)
         self.artists = self.return_artist_list(ax)
 
         self.handle_callbacks(fig, ax)
+        self.handle_callbacks(fig, ax_twinx)
 
         ax.set_xlim(float_if_possible(self.params['xlo']), float_if_possible(self.params['xup']))
         ax.set_ylim(float_if_possible(self.params['ylo']), float_if_possible(self.params['yup']))
@@ -53,7 +65,8 @@ class Plotter:
         fig.canvas.mpl_disconnect(fig.canvas.manager.key_press_handler_id)
 
     def on_key_press(self, event, fig, ax):
-        ticker = mpl.ticker.ScalarFormatter(useMathText=True, useOffset=False)
+        
+        ticker = mpl.ticker.ScalarFormatter(useMathText=True, useOffset=False).set_powerlimits((0,1))
         min_x, max_x = ax.get_xlim()
         min_y, max_y = ax.get_ylim()
 
@@ -61,47 +74,19 @@ class Plotter:
         y_range = max_y - min_y
 
         key = event.key
-    
-        mouse_x = event.x
-        mouse_y = event.y
 
-        x_axis_loc = fig.get_size_inches()[0] * fig.dpi * np.array(ax.get_position())[0][0]
-        y_axis_loc = fig.get_size_inches()[1] * fig.dpi * np.array(ax.get_position())[0][1]
+        over_x_axis, over_y_axis = self.over_axes(ax, fig, event.x, event.y)
+        axis_funcs = {'l': lambda axis: self.toggle_axis_log(ax, axis),
+                      'a': lambda axis: ax.autoscale(axis=axis, tight='True'),
+                      '=': lambda axis: self.update_plot_zoom(ax, axis=axis, amount=0.05),
+                      '-': lambda axis: self.update_plot_zoom(ax, axis=axis, amount=-1./18.)}
 
         if self.picked is False:
-            if key == 'l':
-                if mouse_y < y_axis_loc:
-                    if ax.get_xscale() == 'linear':
-                        ax.set_xscale('log')
-                        self.log_label(ax, xlog=True)
-
-                    else:
-                        ax.set_xscale('linear')
-                        ax.xaxis.set_major_formatter(ticker)
-                        ax.xaxis.get_major_formatter().set_powerlimits((0,1))
-                        self.log_label(ax, xlog=False)
-
-                elif mouse_x < x_axis_loc:
-                    if ax.get_yscale() == 'linear':
-                        ax.set_yscale('log')
-                        self.log_label(ax, ylog=True)
-
-                    else:
-                        ax.set_yscale('linear')
-                        ax.yaxis.set_major_formatter(ticker)
-                        ax.yaxis.get_major_formatter().set_powerlimits((0,1))
-                        self.log_label(ax, ylog=False)
-
-                ax.set_xlim(min_x, max_x)
-                ax.set_ylim(min_y, max_y)
-
-            elif key == 'a':
-                if mouse_x >= x_axis_loc:
-                    ax.autoscale(axis = 'x', tight = 'True')
-
-                if mouse_y >= y_axis_loc:
-                    ax.autoscale(axis = 'y', tight = 'True')
-
+            if key in 'la=-':
+                if over_x_axis:
+                    axis_funcs[key](axis = 'x')
+                if over_y_axis:
+                    axis_funcs[key](axis = 'y')
 
             elif key == 'q':
                 plt.close()
@@ -119,20 +104,6 @@ class Plotter:
                     artist.set_color(c)
 
                 self.update_legend(ax)
-
-            elif key in '+=':
-                if mouse_x >= x_axis_loc:
-                    ax.set_xlim(min_x + (0.05 * x_range), max_x - (0.05 * x_range))
-
-                if mouse_y >= y_axis_loc:
-                    ax.set_ylim(min_y + (0.05 * y_range), max_y - (0.05 * y_range))
-
-            elif key == '-':
-                if mouse_x >= x_axis_loc:
-                    ax.set_xlim(min_x - (x_range / 18.), max_x + (x_range / 18.))
-
-                if mouse_y >= y_axis_loc:
-                    ax.set_ylim(min_y - (y_range / 18.), max_y + (y_range / 18.))
 
             elif key == 'right':
                     ax.set_xlim(min_x + (0.025 * x_range), max_x + (0.025 * x_range))
@@ -178,17 +149,23 @@ class Plotter:
         cid = fig.canvas.mpl_connect('key_press_event', lambda event: self.on_pick_press(event, this_line, cid, fig, ax))
 
 
-    def log_label(self, axis, xlog=False, ylog=False):
-        xlab = axis.get_xlabel()
-        ylab = axis.get_ylabel()
-        if xlog is True:
-            axis.set_xlabel('log ' + xlab)
-        elif ylog is True:
-            axis.set_ylabel('log ' + ylab)
-        elif (xlog is False) and (xlab[0:4] == 'log '):
-            axis.set_xlabel(xlab[4:])
-        elif (ylog is False) and (ylab[0:4] == 'log '):
-            axis.set_ylabel(ylab[4:])
+    def toggle_axis_log(self, ax, axis = 'x'):
+        label_func = getattr(ax, 'set_{}label'.format(axis))
+        scale_func = getattr(ax, 'set_{}scale'.format(axis))
+        lab = getattr(ax, 'get_{}label'.format(axis))()
+        scale = getattr(ax, 'get_{}scale'.format(axis))()
+
+        min_ax, max_ax = getattr(ax, 'get_{}lim'.format(axis))()
+
+        if scale == 'linear':
+            label_func('log ' + lab)
+            scale_func('log')
+
+        elif (scale == 'log') and (lab[0:4] == 'log '):
+            label_func(lab[4:])
+            scale_func('linear')
+
+        getattr(ax, 'set_{}lim'.format(axis))(min_ax, max_ax)
 
     def update_labels(self, ax, data, plot_columns):
         xlabs = [self.params['xlab']]
@@ -215,6 +192,11 @@ class Plotter:
         elif self.params['plot'] == [1]:
             return lambda x, y, **kwargs: ax.scatter(x, y, s=1, **kwargs)
 
+    def update_plot_zoom(self, ax, axis = 'x', amount = 0.05):
+        min_ax, max_ax = getattr(ax, 'get_{}lim'.format(axis))()
+        ax_range = max_ax - min_ax
+        getattr(ax, 'set_{}lim'.format(axis))(min_ax + (amount * ax_range), max_ax - (amount * ax_range))
+
     def return_line_colours(self, ax):
         if self.params['plot'] == [0]:
             return [self.colours.index(line.get_color()) for line in ax.lines]
@@ -227,5 +209,27 @@ class Plotter:
         elif self.params['plot'] == [1]:
             return ax.collections
 
+    def over_axes(self, ax, fig, x, y):
+        bbox = ax.get_position()
+        ypos = ax.get_yaxis().get_ticks_position()
+        xpos = ax.get_xaxis().get_ticks_position()
+
+        xmin, ymin = fig.transFigure.transform(bbox.min)
+        xmax, ymax = fig.transFigure.transform(bbox.max)
+
+        over_x, over_y = False, False
+
+        if (ypos == 'left' and x < xmax and ymin < y < ymax):
+                over_y = True
+        elif (ypos == 'right' and xmin < x  and ymin < y < ymax):
+                over_y = True
+
+        if (xpos == 'bottom' and y < ymax and xmin < x < xmax):
+                over_x = True
+        elif (xpos == 'top' and ymin < y and xmin < x < xmax):
+                over_x = True
+
+        return over_x, over_y
+        
 
         

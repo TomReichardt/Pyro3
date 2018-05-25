@@ -35,7 +35,8 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
         self.nextrelx = 5 + len(prompt)
         self.command_prompt = self.add(nps.Textfield, value='', rely=self.max_y-3, height=1)
         self.command_prompt.add_handlers({'q' : self.h_exit_application})
-        self.command_prompt.add_handlers({10  : self.parse_command})
+        self.command_prompt.add_handlers({10  : self.plot_current})
+        self.command_prompt.add_handlers({'p' : self.plot_all})
         self.command_prompt.add_handlers({'n' : self.next_data})
         self.command_prompt.add_handlers({'b' : self.previous_data})
         self.command_prompt.add_handlers({'c' : self.clear_prompt})
@@ -111,8 +112,13 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
         self.curses_pad.hline(self.max_y - 2, 1, curses.ACS_HLINE, self.max_x-2)
         self.curses_pad.hline(self.max_y - 4, 1, curses.ACS_HLINE, self.max_x-2)
 
-    def parse_command(self, *args):
-        plot_columns = command_parser.command_parse(self.command_prompt.value, self.dataset)
+    def plot_current(self, *args):
+        plot_columns = command_parser.command_parse([(self.command_prompt.value, self.dataset)])
+        self.parentApp.plotter.make_plot(plot_columns, self.data, self.parentApp.plot_parameters)
+
+    def plot_all(self, *args):
+        command_list = [(f.command_prompt.value, f.dataset) for f in self.parentApp.main_forms]
+        plot_columns = command_parser.command_parse(command_list)
         self.parentApp.plotter.make_plot(plot_columns, self.data, self.parentApp.plot_parameters)
 
     def next_data(self, *args):
@@ -172,8 +178,8 @@ class menuEndParser(menuEnd):
 
         vals = math_parser.evaluate(w2.value, col_dict)
         self.parentApp.data[self.parentApp.current_dataset-1][w1.value] = vals
-        self.parentApp.getForm('MAIN').draw_columns()
-        self.parentApp.switchForm('MAIN')
+        self.parentApp.getForm(self.return_id).draw_columns()
+        self.parentApp.switchForm(self.return_id)
 
 class App(nps.NPSAppManaged):
     STARTING_FORM = '1'
@@ -194,7 +200,7 @@ class App(nps.NPSAppManaged):
             self.data.append(pd.DataFrame(list(zip(*vals)),columns=titles))
             self.data[i].name = name
 
-        forms = [self.addForm(str(i+1), FormObject, associated_data = data, n_dataset = self.current_dataset+i) for i, data in enumerate(self.data)]
+        self.main_forms = [self.addForm(str(i+1), FormObject, associated_data = data, n_dataset = self.current_dataset+i) for i, data in enumerate(self.data)]
 
         ## Plot limit forms ##
         self.plot_parameters.update({'xup' : '', 'xlo' : '', 'yup' : '', 'ylo' : ''})

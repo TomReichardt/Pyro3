@@ -34,12 +34,12 @@ class Plotter:
 
         if any(bundle.use_twinx is True for bundle in plot_columns):
             ax_twinx = ax.twinx()
-
-        #ax.pfunc = self.update_plot_type(ax)
+            self.handle_callbacks(fig, ax_twinx)
 
         for bundle in plot_columns:
-            x = data.iloc[:,bundle.x]
-            y = data.iloc[:,bundle.y]
+            plot_data = data[bundle.dataset]
+            x = plot_data.iloc[:,bundle.x]
+            y = plot_data.iloc[:,bundle.y]
             ax_in = ax_twinx if bundle.use_twinx == True else ax
             pfunc = self.update_plot_type(ax_in)
             pfunc(x, y, picker=5)
@@ -48,7 +48,7 @@ class Plotter:
         self.artists = self.return_artist_list(ax)
 
         self.handle_callbacks(fig, ax)
-        self.handle_callbacks(fig, ax_twinx)
+
 
         ax.set_xlim(float_if_possible(self.params['xlo']), float_if_possible(self.params['xup']))
         ax.set_ylim(float_if_possible(self.params['ylo']), float_if_possible(self.params['yup']))
@@ -172,10 +172,11 @@ class Plotter:
         ylabs = [self.params['ylab']]
 
         for bundle in plot_columns:
-            lab = list(data)[bundle.x]
+            plot_data = data[bundle.dataset]
+            lab = list(plot_data)[bundle.x]
             if lab not in xlabs:
                 xlabs.append(lab)
-            lab = list(data)[bundle.y]
+            lab = list(plot_data)[bundle.y]
             if lab not in ylabs:
                 ylabs.append(lab)
 

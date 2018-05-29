@@ -114,12 +114,12 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
 
     def plot_current(self, *args):
         plot_columns = command_parser.command_parse([(self.command_prompt.value, self.dataset)])
-        self.parentApp.plotter.make_plot(plot_columns, self.data, self.parentApp.plot_parameters)
+        self.parentApp.plotter.make_plot(plot_columns, self.parentApp.data, self.parentApp.plot_parameters)
 
     def plot_all(self, *args):
         command_list = [(f.command_prompt.value, f.dataset) for f in self.parentApp.main_forms]
         plot_columns = command_parser.command_parse(command_list)
-        self.parentApp.plotter.make_plot(plot_columns, self.data, self.parentApp.plot_parameters)
+        self.parentApp.plotter.make_plot(plot_columns, self.parentApp.data, self.parentApp.plot_parameters)
 
     def next_data(self, *args):
         if self.dataset == len(self.parentApp.data):

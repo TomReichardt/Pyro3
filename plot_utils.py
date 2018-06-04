@@ -34,6 +34,7 @@ class Plotter:
 
         if any(bundle.use_twinx is True for bundle in plot_columns):
             ax_twinx = ax.twinx()
+            ax_twinx._get_lines.prop_cycler = ax._get_lines.prop_cycler
             self.handle_callbacks(fig, ax_twinx)
 
         for bundle in plot_columns:
@@ -48,7 +49,6 @@ class Plotter:
         self.artists = self.return_artist_list(ax)
 
         self.handle_callbacks(fig, ax)
-
 
         ax.set_xlim(float_if_possible(self.params['xlo']), float_if_possible(self.params['xup']))
         ax.set_ylim(float_if_possible(self.params['ylo']), float_if_possible(self.params['yup']))
@@ -79,10 +79,12 @@ class Plotter:
         axis_funcs = {'l': lambda axis: self.toggle_axis_log(ax, axis),
                       'a': lambda axis: ax.autoscale(axis=axis, tight='True'),
                       '=': lambda axis: self.update_plot_zoom(ax, axis=axis, amount=0.05),
-                      '-': lambda axis: self.update_plot_zoom(ax, axis=axis, amount=-1./18.)}
+                      '-': lambda axis: self.update_plot_zoom(ax, axis=axis, amount=-1./18.),
+                      'up': lambda axis: self.update_plot_pan(ax, axis=axis, amount=0.025),
+                      'down': lambda axis: self.update_plot_pan(ax, axis=axis, amount=-0.025)}
 
         if self.picked is False:
-            if key in 'la=-':
+            if key in axis_funcs.keys():
                 if over_x_axis:
                     axis_funcs[key](axis = 'x')
                 if over_y_axis:
@@ -111,11 +113,11 @@ class Plotter:
             elif key == 'left':
                     ax.set_xlim(min_x - (0.025 * x_range), max_x - (0.025 * x_range))
 
-            elif key == 'up':
-                    ax.set_ylim(min_y + (0.025 * y_range), max_y + (0.025 * y_range))
+            #elif key == 'up':
+            #        ax.set_ylim(min_y + (0.025 * y_range), max_y + (0.025 * y_range))
 
-            elif key == 'down':
-                    ax.set_ylim(min_y - (0.025 * y_range), max_y - (0.025 * y_range))
+            #elif key == 'down':
+            #        ax.set_ylim(min_y - (0.025 * y_range), max_y - (0.025 * y_range))
             else:
                 print('Nothing assigned to key {}!'.format(key))
 
@@ -197,6 +199,11 @@ class Plotter:
         min_ax, max_ax = getattr(ax, 'get_{}lim'.format(axis))()
         ax_range = max_ax - min_ax
         getattr(ax, 'set_{}lim'.format(axis))(min_ax + (amount * ax_range), max_ax - (amount * ax_range))
+
+    def update_plot_pan(self, ax, axis = 'x', amount = 0.025):
+        min_ax, max_ax = getattr(ax, 'get_{}lim'.format(axis))()
+        ax_range = max_ax - min_ax
+        getattr(ax, 'set_{}lim'.format(axis))(min_ax + (amount * ax_range), max_ax + (amount * ax_range))
 
     def return_line_colours(self, ax):
         if self.params['plot'] == [0]:

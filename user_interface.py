@@ -203,12 +203,14 @@ class App(nps.NPSAppManaged):
         self.main_forms = [self.addForm(str(i+1), FormObject, associated_data = data, n_dataset = self.current_dataset+i) for i, data in enumerate(self.data)]
 
         ## Plot limit forms ##
-        self.plot_parameters.update({'xup' : '', 'xlo' : '', 'yup' : '', 'ylo' : ''})
+        self.plot_parameters.update({'xup' : '', 'xlo' : '', 'yup' : '', 'ylo' : '', 'yup2' : '', 'ylo2' : ''})
 
-        limits_1_widgets =  [(nps.TitleText, {'w_id': 'xup', 'name': "Upper x-limit: ", 'value': str(self.plot_parameters['xup']), 'use_two_lines': False}),
-		             (nps.TitleText, {'w_id': 'xlo', 'name': "Lower x-limit: ", 'value': str(self.plot_parameters['xlo']), 'use_two_lines': False}),
-		             (nps.TitleText, {'w_id': 'yup', 'name': "Upper y-limit: ", 'value': str(self.plot_parameters['yup']), 'use_two_lines': False}),
-		             (nps.TitleText, {'w_id': 'ylo', 'name': "Lower y-limit: ", 'value': str(self.plot_parameters['ylo']), 'use_two_lines': False})]
+        limits_1_widgets =  [(nps.TitleText, {'w_id': 'xup', 'name': "Upper x-limit: ", 'value': str(self.plot_parameters['xup']), 'use_two_lines': False, 'begin_entry_at' : 22}),
+		             (nps.TitleText, {'w_id': 'xlo', 'name': "Lower x-limit: ", 'value': str(self.plot_parameters['xlo']), 'use_two_lines': False, 'begin_entry_at' : 22}),
+		             (nps.TitleText, {'w_id': 'yup', 'name': "Upper left y-limit: ", 'value': str(self.plot_parameters['yup']), 'use_two_lines': False, 'begin_entry_at' : 22}),
+		             (nps.TitleText, {'w_id': 'ylo', 'name': "Lower left y-limit: ", 'value': str(self.plot_parameters['ylo']), 'use_two_lines': False, 'begin_entry_at' : 22}),
+		             (nps.TitleText, {'w_id': 'yup2', 'name': "Upper right y-limit: ", 'value': str(self.plot_parameters['yup2']), 'use_two_lines': False, 'begin_entry_at' : 22}),
+		             (nps.TitleText, {'w_id': 'ylo2', 'name': "Lower right y-limit: ", 'value': str(self.plot_parameters['ylo2']), 'use_two_lines': False, 'begin_entry_at' : 22})]
 
         menu_limits_1 = self.addForm('Limits 1', menuEnd, cycle_widgets=True, widget_list = limits_1_widgets)
 
@@ -221,10 +223,11 @@ class App(nps.NPSAppManaged):
         menu_labels_1 = self.addForm('Labels 1', menuEnd, cycle_widgets=True, widget_list = labels_1_widgets)
 
         # Set axis labels #
-        self.plot_parameters.update({'xlab' : None, 'ylab' : None})
+        self.plot_parameters.update({'xlab' : None, 'ylab' : None, 'ylab2' : None})
 
-        labels_2_widgets =  [(nps.TitleText,   {'w_id': 'xlab', 'name': "x-axis label: ", 'value': str(self.plot_parameters['xlab']), 'use_two_lines': False}),
-		             (nps.TitleText,   {'w_id': 'ylab', 'name': "y-axis label: ", 'value': str(self.plot_parameters['ylab']), 'use_two_lines': False}),
+        labels_2_widgets =  [(nps.TitleText,   {'w_id': 'xlab', 'name': "x-axis label: ", 'value': str(self.plot_parameters['xlab']), 'use_two_lines': False, 'begin_entry_at' : 21}),
+		             (nps.TitleText,   {'w_id': 'ylab', 'name': "Left y-axis label: ", 'value': str(self.plot_parameters['ylab']), 'use_two_lines': False, 'begin_entry_at' : 21}),
+		             (nps.TitleText,   {'w_id': 'ylab2', 'name': "Right y-axis label: ", 'value': str(self.plot_parameters['ylab2']), 'use_two_lines': False, 'begin_entry_at' : 21}),
                              (nps.DummyWidget, {'w_id': 'collabs', 'value': [0], 'editable': False})]
 
         menu_labels_2 = self.addForm('Labels 2', menuEnd, cycle_widgets=True, widget_list = labels_2_widgets)

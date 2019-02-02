@@ -80,8 +80,10 @@ class Plotter:
                       'a': lambda axis: ax.autoscale(axis=axis, tight='True'),
                       '=': lambda axis: self.update_plot_zoom(ax, axis=axis, amount=0.05),
                       '-': lambda axis: self.update_plot_zoom(ax, axis=axis, amount=-1./18.),
-                      'up': lambda axis: self.update_plot_pan(ax, axis=axis, amount=0.025),
-                      'down': lambda axis: self.update_plot_pan(ax, axis=axis, amount=-0.025)}
+                      'up': lambda axis: self.update_plot_pan(ax, axis=axis, amount=0.025, key='up'),
+                      'down': lambda axis: self.update_plot_pan(ax, axis=axis, amount=-0.025, key='down'),
+                      'left': lambda axis: self.update_plot_pan(ax, axis=axis, amount=-0.025, key='left'),
+                      'right': lambda axis: self.update_plot_pan(ax, axis=axis, amount=0.025, key='right')}
 
         if self.picked is False:
             if key in axis_funcs.keys():
@@ -93,11 +95,18 @@ class Plotter:
             elif key == 'q':
                 plt.close()
 
-            elif key == 'm':
-                if self.current_palette < (len(self.palettes) - 1): 
-                    self.current_palette += 1 
-                else:
-                    self.current_palette = 0
+            elif key in 'mM':
+                if key == 'm':
+                    if self.current_palette < (len(self.palettes) - 1): 
+                        self.current_palette += 1 
+                    else:
+                        self.current_palette = 0
+
+                elif key == 'M':
+                    if self.current_palette > 0:
+                        self.current_palette -= 1
+                    else:
+                        self.current_palette = len(self.palettes) - 1
 
                 self.colours = list(self.palettes[self.current_palette].values())[0]
 
@@ -106,22 +115,10 @@ class Plotter:
                     artist.set_color(c)
 
                 self.update_legend(ax)
-
-            elif key == 'right':
-                    ax.set_xlim(min_x + (0.025 * x_range), max_x + (0.025 * x_range))
-
-            elif key == 'left':
-                    ax.set_xlim(min_x - (0.025 * x_range), max_x - (0.025 * x_range))
-
-            #elif key == 'up':
-            #        ax.set_ylim(min_y + (0.025 * y_range), max_y + (0.025 * y_range))
-
-            #elif key == 'down':
-            #        ax.set_ylim(min_y - (0.025 * y_range), max_y - (0.025 * y_range))
             else:
-                print('Nothing assigned to key {}!'.format(key))
+                pass
 
-            if key in ['l','a','m','+','=','-','left','right','up','down']:
+            if key in ['l','a','m','M','+','=','-','left','right','up','down']:
                 fig.canvas.draw()
 
         elif self.picked is True:
@@ -200,10 +197,11 @@ class Plotter:
         ax_range = max_ax - min_ax
         getattr(ax, 'set_{}lim'.format(axis))(min_ax + (amount * ax_range), max_ax - (amount * ax_range))
 
-    def update_plot_pan(self, ax, axis = 'x', amount = 0.025):
-        min_ax, max_ax = getattr(ax, 'get_{}lim'.format(axis))()
-        ax_range = max_ax - min_ax
-        getattr(ax, 'set_{}lim'.format(axis))(min_ax + (amount * ax_range), max_ax + (amount * ax_range))
+    def update_plot_pan(self, ax, axis = 'x', amount = 0.025, key='up'):
+        if ((axis == 'x' and key in ['left', 'right']) or (axis == 'y' and key in ['up', 'down'])):
+            min_ax, max_ax = getattr(ax, 'get_{}lim'.format(axis))()
+            ax_range = max_ax - min_ax
+            getattr(ax, 'set_{}lim'.format(axis))(min_ax + (amount * ax_range), max_ax + (amount * ax_range))
 
     def return_line_colours(self, ax):
         if self.params['plot'] == [0]:

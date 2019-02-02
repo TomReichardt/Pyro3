@@ -5,6 +5,7 @@ import curses
 import operator
 import read_files
 import plot_utils
+import error_utils
 import command_parser
 import math_parser
 import pandas as pd
@@ -23,6 +24,7 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
     def __init__(self, *args, **keywords):
         self.data = keywords['associated_data']
         self.dataset = keywords['n_dataset']
+        self.ncols = len(self.data.columns)
         super(FormObject, self).__init__(*args, **keywords)
 
     def create(self, **keywords):
@@ -40,9 +42,9 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
         self.command_prompt.add_handlers({'n' : self.next_data})
         self.command_prompt.add_handlers({'b' : self.previous_data})
         self.command_prompt.add_handlers({'c' : self.clear_prompt})
+        self.command_prompt.add_handlers({'C' : self.clear_all})
 
         self.m1 = self.add_menu(name="Limits", shortcut="l")
-        #self.lm1 = self.m1.addNewSubmenu('Set limits', shortcut='l')
         self.m1.addItem('Set limits', lambda: self.switch_menu_form('Limits 1'), shortcut='l')
 
         self.m2 = self.add_menu(name="Labels", shortcut="a")
@@ -92,12 +94,17 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
         columns = ['{:>3}. {}'.format(i+1, title) for i, title in enumerate(list(self.data.columns))]
 
         num_cols = 3
+ 
+        max_col_len = self.max_y - (self.draw_line_at + 5)
+
         col_len = math.ceil(len(columns) / num_cols)
+        if col_len > max_col_len:
+            col_len = max_col_len
         col_width = self.max_x // (num_cols + 1)
         col_buffer = col_width // (num_cols + 1)
         for i in range(num_cols):
             self.nextrelx = col_buffer + i * (col_buffer + col_width)
-            self.nextrely = self.draw_line_at + 2
+            self.nextrely = self.draw_line_at + 1
             col_start = i * col_len
             col_end = (i+1) * col_len
             if col_end <= len(columns):
@@ -113,28 +120,38 @@ class FormObject(nps.FormBaseNewWithMenus, nps.SplitForm):
         self.curses_pad.hline(self.max_y - 4, 1, curses.ACS_HLINE, self.max_x-2)
 
     def plot_current(self, *args):
-        plot_columns = command_parser.command_parse([(self.command_prompt.value, self.dataset)])
+        plot_columns = command_parser.command_parse([(self.command_prompt.value, self.dataset, self.ncols)])
+        if type(plot_columns) is error_utils.ColumnErrorBundle:
+            self.parentApp.getForm('VEF').text.values = ["",plot_columns.error_message()]
+            self.parentApp.switchForm('VEF')
+            return
         self.parentApp.plotter.make_plot(plot_columns, self.parentApp.data, self.parentApp.plot_parameters)
 
     def plot_all(self, *args):
-        command_list = [(f.command_prompt.value, f.dataset) for f in self.parentApp.main_forms]
+        command_list = [(f.command_prompt.value, f.dataset, f.ncols) for f in self.parentApp.main_forms]
         plot_columns = command_parser.command_parse(command_list)
         self.parentApp.plotter.make_plot(plot_columns, self.parentApp.data, self.parentApp.plot_parameters)
 
     def next_data(self, *args):
         if self.dataset == len(self.parentApp.data):
-            self.parentApp.switchForm('1')
+            self.parentApp.current_dataset = 1
         else:
-            self.parentApp.switchForm(str(self.dataset+1))
+            self.parentApp.current_dataset += 1
+        self.parentApp.switchForm(str(self.parentApp.current_dataset))
 
     def previous_data(self, *args):
         if self.dataset == 1:
-            self.parentApp.switchForm(str(len(self.parentApp.data)))
+            self.parentApp.current_dataset = len(self.parentApp.data)
         else:
-            self.parentApp.switchForm(str(self.dataset-1))
+            self.parentApp.current_dataset -= 1
+        self.parentApp.switchForm(str(self.parentApp.current_dataset))
 
     def clear_prompt(self, *args):
         self.command_prompt.value = ''
+
+    def clear_all(self, *args):
+        for f in self.parentApp.main_forms:
+            f.command_prompt.value = ''
 
     def switch_menu_form(self, form_id):
         self.parentApp.getForm(form_id).return_id = str(self.dataset)
@@ -147,8 +164,10 @@ class menuEnd(nps.fmActionFormV2.ActionFormV2):
     SHOW_ATY           = 2
 
     def __init__(self, *args, **keywords):
-        self.return_id = '1'
         super(menuEnd, self).__init__(*args, **keywords)
+
+    def pre_edit_loop(self):
+        self.return_id = str(self.parentApp.current_dataset)
 
     def on_cancel(self):
         self.parentApp.switchForm(self.return_id)
@@ -167,7 +186,6 @@ class menuEnd(nps.fmActionFormV2.ActionFormV2):
         self.pr = self.add(nps.FixedText, relx = 5, rely = 6, value=str(string))
 
 class menuEndParser(menuEnd):
-
     def on_ok(self):
         w1 = self.get_widget('ncol')
         w2 = self.get_widget('nexp')
@@ -178,7 +196,24 @@ class menuEndParser(menuEnd):
 
         vals = math_parser.evaluate(w2.value, col_dict)
         self.parentApp.data[self.parentApp.current_dataset-1][w1.value] = vals
+        self.parentApp.getForm(self.return_id).ncols += 1
         self.parentApp.getForm(self.return_id).draw_columns()
+        self.parentApp.switchForm(self.return_id)
+
+class errorPopup(nps.ActionFormMinimal):
+    DEFAULT_LINES      = 12
+    DEFAULT_COLUMNS    = 30
+    SHOW_ATX           = 25
+    SHOW_ATY           = 6
+
+    def __init__(self, *args, **keywords):
+        self.return_id = '1'
+        super(errorPopup, self).__init__(*args, **keywords)
+
+    def create(self):
+        self.text = self.add(nps.TitlePager, editable=False, autowrap=True, begin_entry_at=0, name = "Error in command", values = ["","Hopefully this wraps over multiple lines, but I don't have much hope"])
+
+    def on_ok(self):
         self.parentApp.switchForm(self.return_id)
 
 class App(nps.NPSAppManaged):
@@ -201,6 +236,8 @@ class App(nps.NPSAppManaged):
             self.data[i].name = name
 
         self.main_forms = [self.addForm(str(i+1), FormObject, associated_data = data, n_dataset = self.current_dataset+i) for i, data in enumerate(self.data)]
+
+        self.variable_error_form = self.addForm('VEF', errorPopup, color="CAUTION")
 
         ## Plot limit forms ##
         self.plot_parameters.update({'xup' : '', 'xlo' : '', 'yup' : '', 'ylo' : '', 'yup2' : '', 'ylo2' : ''})
